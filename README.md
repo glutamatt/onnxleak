@@ -59,7 +59,7 @@ I tried to replicate my work flow in **[a demo app](https://github.com/glutamatt
 
 > here is running one session after the other (open, infer, close, open, infer, close, ...) with 10000 concurrent prediction for each session
 >
-> the model is always the same (a [3MB onnx file](https://github.com/glutamatt/onnxleak/blob/fd18756faf292bea257561e6b0a83d50296a98b6/model.onnx), with 3 hidden dense layers, 1 input (shape [1, 1415]) , 1 output (shape [1, 100]))
+> the model is always the same (a [3MB onnx file](https://github.com/glutamatt/onnxleak/blob/a96bbd555197f1e533c66ca3f0b46d3c53488acf/model.onnx), with 3 hidden dense layers, 1 input (shape [1, 1415]) , 1 output (shape [1, 100]))
 >
-> the input is always the [same "zero filled"](https://github.com/glutamatt/onnxleak/blob/fd18756faf292bea257561e6b0a83d50296a98b6/main.go#L37) vector
+> the input is always the [same "zero filled"](https://github.com/glutamatt/onnxleak/blob/a96bbd555197f1e533c66ca3f0b46d3c53488acf/main.go#L37) vector
 
