@@ -36,7 +36,7 @@ func main() {
 	inputShape := []int64{1, 1415}
 	inputSlice := make([]float32, inputShape[1])
 	inputTensorLen := C.ulong(inputShape[1] * 4) //4 bytes per float
-	var outputLength = 100
+	outputLength := 100
 	predPerSession := 10000
 	sessionCounter := 0
 
@@ -44,10 +44,9 @@ func main() {
 		sessionCounter++
 		threadCount, memory, goMem := stats()
 		fmt.Printf("#%d New Session (%d threads, %d MB resident, %d MB go sys)\n", sessionCounter, threadCount, memory, goMem)
-		//Let's GO
+
 		var clonedSessionOptions *C.OrtSessionOptions
 		checkStatus(C.CloneSessionOptions(ortAPI, sessionOptions, &clonedSessionOptions))
-
 		var session *C.OrtSession
 		checkStatus(C.CreateSession(ortAPI, ortEnv, modelPath, clonedSessionOptions, &session))
 
@@ -55,7 +54,7 @@ func main() {
 		waitGroup.Add(predPerSession)
 
 		for predCounter := 0; predCounter < predPerSession; predCounter++ {
-			go func(printPred bool) {
+			go func(mustPrintPredictionSamples bool) {
 				var inputTensor *C.OrtValue
 				var outputTensor *C.OrtValue
 				var memoryInfo *C.OrtMemoryInfo
@@ -83,11 +82,11 @@ func main() {
 				))
 				resPointer := unsafe.Pointer(nil)
 				checkStatus(C.GetTensorMutableData(ortAPI, outputTensor, &resPointer))
-				if printPred {
+				if mustPrintPredictionSamples {
 					predictionsNoCopy := floatSlice(resPointer, outputLength)
 					fmt.Printf("sample predictions from nocopy: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
 				}
-				//C.ReleaseMemoryInfo(ortAPI, memoryInfo)
+				C.ReleaseMemoryInfo(ortAPI, memoryInfo)
 				C.ReleaseValue(ortAPI, inputTensor)
 				C.ReleaseValue(ortAPI, outputTensor)
 				waitGroup.Done()
