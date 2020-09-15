@@ -84,13 +84,13 @@ func main() {
 				checkStatus(C.GetTensorMutableData(ortAPI, outputTensor, &resPointer))
 				if mustPrintPredictionSamples {
 					predictionsNoCopy := floatSlice(resPointer, outputLength)
-					fmt.Printf("sample predictions from nocopy: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
+					fmt.Printf("look at some predictions: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
 				}
 				C.ReleaseMemoryInfo(ortAPI, memoryInfo)
 				C.ReleaseValue(ortAPI, inputTensor)
 				C.ReleaseValue(ortAPI, outputTensor)
 				waitGroup.Done()
-			}(sessionCounter%50 == 0 && (predCounter%(predPerSession/10)) == 0)
+			}(sessionCounter%20 == 0 && (predCounter%(predPerSession/10)) == 0)
 		}
 
 		waitGroup.Wait()
