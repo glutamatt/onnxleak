@@ -1,13 +1,13 @@
-## Full docker
+## Run with docker
 
 ```bash
 docker build --tag tmponnxleak .
 docker run -it --rm tmponnxleak
 ```
 
-## Run locally
+## Run local go
 
-### prepare onnx deps
+### get onnx dependencies
 
 ```bash
 docker build . --target=downloader --tag=onnx-downloader
@@ -21,8 +21,7 @@ OMP_WAIT_POLICY=PASSIVE OMP_NUM_THREADS=1 LD_LIBRARY_PATH="$(pwd)"/onnxruntime/l
 ```
 
 
-
-# Issue
+# Github Issue
 
 ## Possible Memory leak over sessions released
 
