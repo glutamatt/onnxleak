@@ -31,14 +31,14 @@ func main() {
 	outputNames := []*C.char{C.CString("46")}
 	var outputLength = 100
 	inputShape := []int64{1, 1415}
-	predPerSession := 1000
+	predPerSession := 10000
 
 	sessionCounter := 0
 	for {
 		sessionCounter++
 		time.Sleep(500 * time.Millisecond)
-		threadCount, memory := stats()
-		fmt.Printf("#%d New Session (%d threads, %d MB)\n", sessionCounter, threadCount, memory)
+		threadCount, memory, goMem := stats()
+		fmt.Printf("#%d New Session (%d threads, %d MB resident, %d MB go sys)\n", sessionCounter, threadCount, memory, goMem)
 		//Let's GO
 		var clonedSessionOptions *C.OrtSessionOptions
 		var session *C.OrtSession
@@ -83,13 +83,13 @@ func main() {
 				checkStatus(C.GetTensorMutableData(ortAPI, outputTensor, &resPointer))
 				predictionsNoCopy := floatSlice(resPointer, outputLength)
 				if printPred {
-					fmt.Printf("predictions nocopy: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
+					fmt.Printf("sample predictions from nocopy: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
 				}
 				C.ReleaseMemoryInfo(ortAPI, memoryInfo)
 				C.ReleaseValue(ortAPI, inputTensor)
 				C.ReleaseValue(ortAPI, outputTensor)
 				wg.Done()
-			}(sessionCounter % 20 == 0)
+			}(sessionCounter % 10 == 0 && (predCounter % (predPerSession / 10)) == 0)
 		}
 
 		wg.Wait()
@@ -126,7 +126,7 @@ func checkStatus(status *C.OrtStatus) {
 	}
 }
 
-func stats() (threads, mem int) {
+func stats() (threads, mem int, goMem int) {
 	stat, _ := ioutil.ReadFile(fmt.Sprintf("/proc/%d/stat", os.Getpid()))
 	threadsPos := 19
 	memPos := 23
@@ -135,5 +135,9 @@ func stats() (threads, mem int) {
 	fmt.Sscan(parts[memPos], &mem)
 	mem *= os.Getpagesize()
 	mem /= 1000000 // MB
+
+	goMemStats := new(runtime.MemStats)
+	runtime.ReadMemStats(goMemStats)
+	goMem = int(goMemStats.Sys) / 1000000 // MB
 	return
 }
