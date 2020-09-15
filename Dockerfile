@@ -16,7 +16,7 @@ RUN rm -fr microsoft.ml.onnxruntime microsoft.ml.onnxruntime.nupkg
 
 FROM golang:1.15-buster as builder
 WORKDIR /app
-COPY --from=downloader /onnxruntime /onnxruntime
+COPY --from=downloader /onnxruntime onnxruntime
 COPY model.onnx .
 ADD onnxruntime_go_api.* ./
 ADD ./ /app
