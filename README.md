@@ -21,7 +21,7 @@ OMP_WAIT_POLICY=PASSIVE OMP_NUM_THREADS=1 LD_LIBRARY_PATH="$(pwd)"/onnxruntime/l
 ```
 
 
-# Github Issue
+# [Github Issue](https://github.com/microsoft/onnxruntime/issues/5176)
 
 ## Possible Memory leak over sessions released
 
