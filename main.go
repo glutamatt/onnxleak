@@ -8,56 +8,58 @@ import "C"
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 	"unsafe"
 )
 
+//single shared references for the whole process
 var ortAPI *C.OrtApi
 var ortEnv *C.OrtEnv
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	ortAPI = C.GetOrtApi()
 	checkStatus(C.CreateEnv(ortAPI, C.ORT_LOGGING_LEVEL_ERROR, C.CString("main_env"), &ortEnv))
-	sessionOptions := getSessionOptions()
+
+	var sessionOptions *C.OrtSessionOptions
+	checkStatus(C.CreateSessionOptions(ortAPI, &sessionOptions))
+	checkStatus(C.SetSessionGraphOptimizationLevel(ortAPI, sessionOptions, 0))
+	checkStatus(C.DisableCpuMemArena(ortAPI, sessionOptions))
+	checkStatus(C.DisableMemPattern(ortAPI, sessionOptions))
+
 	modelPath := C.CString("model.onnx")
 	inputNames := []*C.char{C.CString("input.1")}
 	outputNames := []*C.char{C.CString("46")}
-	var outputLength = 100
 	inputShape := []int64{1, 1415}
+	inputSlice := make([]float32, inputShape[1])
+	inputTensorLen := C.ulong(inputShape[1] * 4) //4 bytes per float
+	var outputLength = 100
 	predPerSession := 10000
-
 	sessionCounter := 0
-	for {
+
+	for { // create a new session, run {predPerSession} concurrent predictions and close the session
 		sessionCounter++
-		time.Sleep(500 * time.Millisecond)
 		threadCount, memory, goMem := stats()
 		fmt.Printf("#%d New Session (%d threads, %d MB resident, %d MB go sys)\n", sessionCounter, threadCount, memory, goMem)
 		//Let's GO
 		var clonedSessionOptions *C.OrtSessionOptions
-		var session *C.OrtSession
-
 		checkStatus(C.CloneSessionOptions(ortAPI, sessionOptions, &clonedSessionOptions))
+
+		var session *C.OrtSession
 		checkStatus(C.CreateSession(ortAPI, ortEnv, modelPath, clonedSessionOptions, &session))
 
-		wg := sync.WaitGroup{}
-		wg.Add(predPerSession)
+		waitGroup := sync.WaitGroup{}
+		waitGroup.Add(predPerSession)
 
 		for predCounter := 0; predCounter < predPerSession; predCounter++ {
 			go func(printPred bool) {
 				var inputTensor *C.OrtValue
 				var outputTensor *C.OrtValue
 				var memoryInfo *C.OrtMemoryInfo
-				//checkStatus(C.CreateCpuMemoryInfo(ortAPI, C.OrtDeviceAllocator, C.OrtMemTypeDefault, &memoryInfo))
-				checkStatus(C.CreateCpuMemoryInfo(ortAPI, C.OrtArenaAllocator, C.OrtMemTypeDefault, &memoryInfo))
-				inputTensorLen := C.ulong(inputShape[1] * 4) //4 bytes per float
-				inputSlice := make([]float32, inputShape[1])
+				checkStatus(C.CreateCpuMemoryInfo(ortAPI, C.OrtDeviceAllocator, C.OrtMemTypeDefault, &memoryInfo))
 				checkStatus(C.CreateTensorWithDataAsOrtValue(
 					ortAPI,
 					memoryInfo,
@@ -81,18 +83,18 @@ func main() {
 				))
 				resPointer := unsafe.Pointer(nil)
 				checkStatus(C.GetTensorMutableData(ortAPI, outputTensor, &resPointer))
-				predictionsNoCopy := floatSlice(resPointer, outputLength)
 				if printPred {
+					predictionsNoCopy := floatSlice(resPointer, outputLength)
 					fmt.Printf("sample predictions from nocopy: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
 				}
-				C.ReleaseMemoryInfo(ortAPI, memoryInfo)
+				//C.ReleaseMemoryInfo(ortAPI, memoryInfo)
 				C.ReleaseValue(ortAPI, inputTensor)
 				C.ReleaseValue(ortAPI, outputTensor)
-				wg.Done()
-			}(sessionCounter % 10 == 0 && (predCounter % (predPerSession / 10)) == 0)
+				waitGroup.Done()
+			}(sessionCounter%50 == 0 && (predCounter%(predPerSession/10)) == 0)
 		}
 
-		wg.Wait()
+		waitGroup.Wait()
 		C.ReleaseSession(ortAPI, session)
 		C.ReleaseSessionOptions(ortAPI, clonedSessionOptions)
 	}
@@ -104,14 +106,6 @@ func floatSlice(dataPointer unsafe.Pointer, size int) (slice []float32) {
 	predHeader.Len = size
 	predHeader.Cap = size
 	return
-}
-
-func getSessionOptions() (ortSessionOptions *C.OrtSessionOptions) {
-	checkStatus(C.CreateSessionOptions(ortAPI, &ortSessionOptions))
-	checkStatus(C.SetSessionGraphOptimizationLevel(ortAPI, ortSessionOptions, 0))
-	//checkStatus(C.DisableCpuMemArena(ortAPI, ortSessionOptions))
-	//checkStatus(C.DisableMemPattern(ortAPI, ortSessionOptions))
-	return ortSessionOptions
 }
 
 func checkStatus(status *C.OrtStatus) {
