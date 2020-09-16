@@ -20,6 +20,11 @@ import (
 var ortAPI *C.OrtApi
 var ortEnv *C.OrtEnv
 
+type InputTensor struct {
+	tensor *C.OrtValue
+	data []float32
+}
+
 func main() {
 	ortAPI = C.GetOrtApi()
 	checkStatus(C.CreateEnv(ortAPI, C.ORT_LOGGING_LEVEL_ERROR, C.CString("main_env"), &ortEnv))
@@ -34,11 +39,36 @@ func main() {
 	inputNames := []*C.char{C.CString("input.1")}
 	outputNames := []*C.char{C.CString("46")}
 	inputShape := []int64{1, 1415}
-	inputSlice := make([]float32, inputShape[1])
 	inputTensorLen := C.ulong(inputShape[1] * 4) //4 bytes per float
 	outputLength := 100
 	predPerSession := 10000
 	sessionCounter := 0
+
+
+	var inputTensorPool = sync.Pool{
+		New: func() interface{} {
+			println("inputTensorPool.New")
+			var inputTensor *C.OrtValue
+			var memoryInfo *C.OrtMemoryInfo
+			checkStatus(C.CreateCpuMemoryInfo(ortAPI, C.OrtDeviceAllocator, C.OrtMemTypeDefault, &memoryInfo))
+			inputSlice := make([]float32, inputShape[1])
+			checkStatus(C.CreateTensorWithDataAsOrtValue(
+				ortAPI,
+				memoryInfo,
+				unsafe.Pointer(&inputSlice[0]),
+				inputTensorLen,
+				(*C.long)(unsafe.Pointer(&inputShape[0])),
+				2, //number of dimensions
+				C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
+				&inputTensor,
+			))
+			C.ReleaseMemoryInfo(ortAPI, memoryInfo)
+			return &InputTensor{
+				tensor: inputTensor,
+				data: inputSlice,
+			}
+		},
+	}
 
 	for { // create a new session, run {predPerSession} concurrent predictions and close the session
 		sessionCounter++
@@ -55,39 +85,29 @@ func main() {
 
 		for predCounter := 0; predCounter < predPerSession; predCounter++ {
 			go func(mustPrintPredictionSamples bool) {
-				var inputTensor *C.OrtValue
 				var outputTensor *C.OrtValue
-				var memoryInfo *C.OrtMemoryInfo
-				checkStatus(C.CreateCpuMemoryInfo(ortAPI, C.OrtDeviceAllocator, C.OrtMemTypeDefault, &memoryInfo))
-				checkStatus(C.CreateTensorWithDataAsOrtValue(
-					ortAPI,
-					memoryInfo,
-					unsafe.Pointer(&inputSlice[0]),
-					inputTensorLen,
-					(*C.long)(unsafe.Pointer(&inputShape[0])),
-					2, //number of dimensions
-					C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
-					&inputTensor,
-				))
+				inputTensor := inputTensorPool.Get().(*InputTensor)
+				//for i := range inputTensor.data {
+					//inputTensor.data[i] = rand.Float32()
+				//}
 				checkStatus(C.Run(
 					ortAPI,
 					session,
 					nil,
 					(**C.char)(unsafe.Pointer(&inputNames[0])),
-					(**C.OrtValue)(unsafe.Pointer(&inputTensor)),
+					(**C.OrtValue)(unsafe.Pointer(&inputTensor.tensor)),
 					1, //one input
 					(**C.char)(unsafe.Pointer(&outputNames[0])),
 					1, //one output
 					&outputTensor,
 				))
+				inputTensorPool.Put(inputTensor)
 				resPointer := unsafe.Pointer(nil)
 				checkStatus(C.GetTensorMutableData(ortAPI, outputTensor, &resPointer))
 				if mustPrintPredictionSamples {
 					predictionsNoCopy := floatSlice(resPointer, outputLength)
 					fmt.Printf("look at some predictions: %v ... %v\n", predictionsNoCopy[:3], predictionsNoCopy[outputLength-3:])
 				}
-				C.ReleaseMemoryInfo(ortAPI, memoryInfo)
-				C.ReleaseValue(ortAPI, inputTensor)
 				C.ReleaseValue(ortAPI, outputTensor)
 				waitGroup.Done()
 			}(sessionCounter%20 == 0 && (predCounter%(predPerSession/10)) == 0)
