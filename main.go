@@ -40,15 +40,18 @@ func main() {
 	predPerSession := 10000
 	sessionCounter := 0
 
+
+	var clonedSessionOptions *C.OrtSessionOptions
+	checkStatus(C.CloneSessionOptions(ortAPI, sessionOptions, &clonedSessionOptions))
+	var session *C.OrtSession
+	checkStatus(C.CreateSession(ortAPI, ortEnv, modelPath, clonedSessionOptions, &session))
+
 	for { // create a new session, run {predPerSession} concurrent predictions and close the session
 		sessionCounter++
 		threadCount, memory, goMem := stats()
 		fmt.Printf("#%d New Session (%d threads, %d MB resident, %d MB go sys)\n", sessionCounter, threadCount, memory, goMem)
 
-		var clonedSessionOptions *C.OrtSessionOptions
-		checkStatus(C.CloneSessionOptions(ortAPI, sessionOptions, &clonedSessionOptions))
-		var session *C.OrtSession
-		checkStatus(C.CreateSession(ortAPI, ortEnv, modelPath, clonedSessionOptions, &session))
+
 
 		waitGroup := sync.WaitGroup{}
 		waitGroup.Add(predPerSession)
@@ -94,8 +97,8 @@ func main() {
 		}
 
 		waitGroup.Wait()
-		C.ReleaseSession(ortAPI, session)
-		C.ReleaseSessionOptions(ortAPI, clonedSessionOptions)
+		//C.ReleaseSession(ortAPI, session)
+		//C.ReleaseSessionOptions(ortAPI, clonedSessionOptions)
 	}
 }
 
