@@ -1,5 +1,8 @@
 #include <onnxruntime/include/onnxruntime_c_api.h>
 
+// Why this file ?
+// https://github.com/golang/go/blob/786120b55db5c3567d8c353fc399e9339c7406dd/src/cmd/cgo/doc.go#L207-L233
+
 const OrtApi *GetOrtApi();
 OrtStatus *CreateEnv(OrtApi *api, OrtLoggingLevel l, const char *logid, OrtEnv **out);
 void ReleaseStatus(OrtApi *api, OrtStatus *s);
